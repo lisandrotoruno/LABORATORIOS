@@ -1,0 +1,159 @@
+/* 
+ * File:   main.c
+ * Author: LISANDRO TORUÑO
+ *
+ * Created on 17 de mayo de 2022, 04:48 PM
+ */
+// CONFIG1
+#pragma config FOSC = INTRC_NOCLKOUT// Oscillator Selection bits (INTOSCIO oscillator: I/O function on RA6/OSC2/CLKOUT pin, I/O function on RA7/OSC1/CLKIN)
+#pragma config WDTE = OFF           // Watchdog Timer Enable bit (WDT disabled and can be enabled by SWDTEN bit of the WDTCON register)
+#pragma config PWRTE = OFF          // Power-up Timer Enable bit (PWRT disabled)
+#pragma config MCLRE = ON           // RE3/MCLR pin function select bit (RE3/MCLR pin function is digital input, MCLR internally tied to VDD)
+#pragma config CP = OFF             // Code Protection bit (Program memory code protection is disabled)
+#pragma config CPD = OFF            // Data Code Protection bit (Data memory code protection is disabled)
+#pragma config BOREN = OFF          // Brown Out Reset Selection bits (BOR disabled)
+#pragma config IESO = OFF           // Internal External Switchover bit (Internal/External Switchover mode is disabled)
+#pragma config FCMEN = OFF          // Fail-Safe Clock Monitor Enabled bit (Fail-Safe Clock Monitor is disabled)
+#pragma config LVP = OFF            // Low Voltage Programming Enable bit (RB3 pin has digital I/O, HV on MCLR must be used for programming)
+
+// CONFIG2
+#pragma config BOR4V = BOR40V   // Brown-out Reset Selection bit (Brown-out Reset set to 4.0V)
+#pragma config WRT = OFF        // Flash Program Memory Self Write Enable bits (Write protection off)
+
+// #pragma config statements should precede project file includes.
+// Use project enums instead of #define for ON and OFF.
+
+#include <xc.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+
+/*------------------------------------------------------------------------------
+ * CONSTANTES
+ ------------------------------------------------------------------------------*/
+#define _XTAL_FREQ 1000000          // Para usar delay, usamos un reloj de 1Mhz
+
+/*------------------------------------------------------------------------------
+ * VARIABLES
+ ------------------------------------------------------------------------------*/
+uint8_t address = 0x10, pot = 0;;      // dirección y data
+
+/*------------------------------------------------------------------------------
+ * PROTOTIPO DE FUNCIONES
+ ------------------------------------------------------------------------------*/
+void setup(void);
+uint8_t read_EEPROM(uint8_t address);
+void write_EEPROM(uint8_t address, uint8_t data);
+
+/*------------------------------------------------------------------------------
+ * INTERRUPCIONES
+ ------------------------------------------------------------------------------*/
+void __interrupt() isr (void){
+    if(PIR1bits.ADIF){              // Fue interrupción del ADC, entonces:
+        PORTAbits.RA4 = 0;
+        pot = ADRESH;
+        PORTD = pot;
+        PIR1bits.ADIF = 0;          // Limpiamos bandera de interrupción
+    }
+    
+    if(INTCONbits.RBIF){            // Fue interrupción del PORTB, entonces:
+        if(!PORTBbits.RB0){               //SLEEP
+            SLEEP();                // PIC en bajo consumo  
+        }
+        if (!PORTBbits.RB1){}         // Interrupción del portB -> Despertamos el pic (Wake-Up)
+        
+        if (!PORTBbits.RB2){         // Si es RB2, guarda el valor del potenciometro y lo escribe en el PORTC
+            write_EEPROM(address, pot);     //Escribimos el valor del potenciometro en la dirección 
+            __delay_ms(10);                 //Delay solo por si acaso
+            PORTC = read_EEPROM(address);   // En el PORTC se muestra la lectura de EEPROM del valor que tiene en esa dirección.
+        }
+        INTCONbits.RBIF = 0;             // Limpiamos bandera de interrupción
+    }
+    return;        
+}
+/*------------------------------------------------------------------------------
+ * CICLO PRINCIPAL
+ ------------------------------------------------------------------------------*/
+void main(void) {
+    setup();
+    while(1){
+        if(ADCON0bits.GO == 0){         // Si no está convirtiendo, entonces:
+            ADCON0bits.GO = 1;          // Comenzamos a convertir ADC
+        }
+        PORTC = read_EEPROM(address);   // En el PORTC se muestra la lectura de EEPROM del valor que tiene en esa dirección.
+    }
+    return;
+}
+
+/*------------------------------------------------------------------------------
+ * CONFIGURACION
+ ------------------------------------------------------------------------------*/
+void setup(void){
+    ANSEL = 0x02;           //AN1
+    ANSELH = 0;             //DIGITAL I/O
+    
+    //CONFIG DE RELOJ
+    OSCCONbits.IRCF = 0b100; //1MHz
+    OSCCONbits.SCS = 1;      //Reloj interno
+    
+    //CONFIG PUERTOS
+    TRISA = 0x02;           // Ahí está AN1 que es entrada del pote
+    PORTA = 0;
+    TRISB = 0x07;           //0b00000111 -> Pulsadores
+    PORTB = 0;
+    TRISD = 0;
+    PORTD = 0;
+    TRISC = 0;
+    PORTC = 0;
+    TRISE = 0;
+    PORTE = 0;
+    
+    // Configuración ADC
+    ADCON0bits.ADCS = 0b00;     // Fosc/2
+    ADCON1bits.VCFG0 = 0;       // VDD
+    ADCON1bits.VCFG1 = 0;       // VSS
+    ADCON0bits.CHS = 1;    // Seleccionamos el AN1
+    ADCON1bits.ADFM = 0;        // Justificado a la izquierda
+    ADCON0bits.ADON = 1;        // Habilitamos modulo ADC
+    __delay_us(40);             // Sample time
+
+    // Configuración PULL-UP
+    OPTION_REGbits.nRBPU = 0;
+    WPUB = 0x07;                //Los primeros 3 bits - significativo
+    IOCB = 0x07;         
+      
+    // Configuracion interrupciones
+    PIR1bits.ADIF = 0;          // Limpiamos bandera de ADC
+    PIE1bits.ADIE = 1;          // Habilitamos interrupcion de ADC    
+    INTCONbits.RBIE = 1;        // Habilitamos interrupcion de PORTB
+    INTCONbits.RBIF = 0;        // Limmpiamos bandera de PORTB
+    INTCONbits.PEIE = 1;        // Habilitamos interrupcion Perífericas    
+    INTCONbits.GIE = 1;         // Habilitamos interrupción general
+}
+
+/*------------------------------------------------------------------------------
+ *FUNCIONES
+ ------------------------------------------------------------------------------*/
+uint8_t read_EEPROM(uint8_t address){
+    EEADR = address;            // Guardamos la dirección en el valor de dirección que tiene (0x10))
+    EECON1bits.EEPGD = 0;       // Lectura a la EEPROM
+    EECON1bits.RD = 1;          // Obtenemos dato de la EEPROM
+    return EEDAT;               // Regresamos dato 
+}
+
+void write_EEPROM(uint8_t address, uint8_t data){
+    EEADR = address;            //Elegimos la dirección que vamos a escribir
+    EEDAT = data;               //Elegimos el dato que vamos a guardar
+    EECON1bits.EEPGD = 0;       // Escritura a la EEPROM
+    EECON1bits.WREN = 1;        // Habilitamos escritura en la EEPROM
+    
+    INTCONbits.GIE = 0;         // Deshabilitamos interrupciones
+    EECON2 = 0x55;              //Según el fabricante dice que se tienen que poner estos dos valores en el registro de EECON2
+    EECON2 = 0xAA;
+    
+    EECON1bits.WR = 1;          // Iniciamos escritura
+    
+    EECON1bits.WREN = 0;        // Deshabilitamos escritura en la EEPROM
+    INTCONbits.RBIF = 0;        //
+    INTCONbits.GIE = 1;         // Habilitamos interrupciones
+}
