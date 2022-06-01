@@ -100,13 +100,13 @@ void __interrupt() isr(void){
     
             if(ADCON0bits.CHS == 0){         // ELIJIÓ EL CH0?
                 val_pot1 = ADRESH;
-                CCPR1L = (val_pot1>>1)+120;
+                CCPR1L = (val_pot1>>1)+124;
                 CCP1CONbits.DC1B1 = val_pot1 & 0b01;
                 CCP1CONbits.DC1B0 = (val_pot1>>7);
             }
             else if(ADCON0bits.CHS == 1){   // ELIJIÓ EL CH1?
                 val_pot2 = ADRESH;
-                CCPR2L = (val_pot2>>1)+120;   // VALOR == 124
+                CCPR2L = (val_pot2>>1)+124;   // VALOR == 124
                 CCP1CONbits.DC1B1 = val_pot2 & 0b01;
                 CCP1CONbits.DC1B0 = (val_pot2>>7);
             }
@@ -299,7 +299,6 @@ if(modo == 0b00000001){
     ANSEL = 0x0F;               // AN0, AN1, AN2 Y AN3 ENTRADAS ANALÓGICAS
     ANSELH = 0;                 // I/O digitales
     
-    TRISA = 0x0F;               // los nibble bajo son entradas.
     TRISB = 0b00000111;         // ENTRADA -> PULSADORES (RB0,RB1,RB2)    
     TRISC = 0;                  // Salida
     TRISD = 0;                  // Salida
@@ -319,45 +318,36 @@ if(modo == 0b00000001){
     WPUB = 0b00000111;
     IOCB = 0b00000111;
     
-//Config ADC
-    ADCON0bits.ADCS = 0b11;         // FRC
-    ADCON1bits.VCFG0 = 0;           // Referencia VDD
-    ADCON1bits.VCFG1 = 0;           // Referencia VSS
-    ADCON0bits.CHS = 0;             // Se selecciona PORTA0/AN0
-    ADCON1bits.ADFM = 0;            // Se indica que se tendrá un justificado a la izquierda
-    ADCON0bits.ADON = 1;            // Se habilita el modulo ADC
-    __delay_us(40);                 // Delay para sample time
+//Configurar ADC
+    ADCON1bits.ADFM = 0; //Justificar a la izquierda
+    ADCON1bits.VCFG0 = 0; //Vss
+    ADCON1bits.VCFG1 = 0; //VDD
     
-//Config PWM
-    TRISCbits.TRISC2 = 1;           // RC2/CCP1 como salida deshabilitado
-    TRISCbits.TRISC1 = 1;           // Se deshabilita salida de PWM (CCP2)
-    CCP1CON = 0;                    // Se apaga CCP1
-    CCP2CON = 0;                    // Se apaga CCP2
-    PR2 = 155;                      // Período de 20 ms  
+    ADCON0bits.ADCS = 0b10; //ADC oscilador -> Fosc/32
+    ADCON0bits.CHS = 0;     //Comenzar en primer canal
+    __delay_us(50);        
+    ADCON0bits.ADON = 1;    //Habilitar la conversión ADC
     
-//Config CCP
-    CCP1CONbits.P1M = 0;            // Modo single output
-    CCP1CONbits.CCP1M = 0b1100;     // Modo PWM
-    CCP2CONbits.CCP2M = 0b1100;     // Modo PWM
-//Servo 1
-    CCPR1L = 30>>2;                 //Ciclo de trabajo base pues se va a variar
-    CCP1CONbits.DC1B = 30 & 0b11;       
-
-//Servo 2
-    CCPR2L = 30>>2;                 //Ciclo de trabajo base pues se va a variar
-    CCP2CONbits.DC2B0 = 30 & 0b01;      
-    CCP2CONbits.DC2B1 = (30 & 0b10)>>1; 
-
-//Config TMR2
-    PIR1bits.TMR2IF = 0;        // Limpieza de bandera del TMR2
-    T2CONbits.T2CKPS = 0b11;    // Prescaler 1:16
-    T2CONbits.TMR2ON = 1;       // Se enciende TMR2
-    while(!PIR1bits.TMR2IF);    // Se espera un ciclo del TMR2
-    PIR1bits.TMR2IF = 0;        // Limpieza de bandera del TMR2 nuevamente
+//Configurar PWM
+    PR2 = 250; //Valor inicial de PR2
+    CCP1CONbits.P1M = 0; //PWM bits de salida
+    CCP1CONbits.CCP1M = 0b00001100; //Se habilita PWM   
+    CCP2CONbits.CCP2M = 0b00001100;   
     
-    TRISCbits.TRISC2 = 0;       // Se habilita salida de PWM (CCP1)
-    TRISCbits.TRISC1 = 0;       // Se habilita salida de PWM (CCP2)
-
+    CCPR1L = 0x0F; 
+    CCPR2L = 0x0F;
+    CCP1CONbits.DC1B = 0; //Bits menos significativos del Duty Cycle
+    CCP2CONbits.DC2B1 = 0;
+    CCP2CONbits.DC2B0 = 0;
+    
+    PIR1bits.TMR2IF = 0; //Se limpia la bandera
+    T2CONbits.T2CKPS1 = 1; //Prescaler de 16
+    T2CONbits.T2CKPS0 = 1;
+    T2CONbits.TMR2ON = 1; //Se enciende el TMR2
+    
+    while (!PIR1bits.TMR2IF); //Se espera una interrupción
+    PIR1bits.TMR2IF = 0;
+    
 //Config I2C
     SSPADD = ((_XTAL_FREQ)/(4*I2C_SPEED)) - 1;  // 100 kHz
     SSPSTATbits.SMP = 1;        // Velocidad de rotación
