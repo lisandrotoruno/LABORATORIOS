@@ -92,32 +92,33 @@ void __interrupt() isr(void){
                 modo = 0b00000001;
             }
         }                               // Mostramos el modo en el puerto D    
-        INTCONbits.RBIF = 0;                        // Limpiamos bandera  
+        INTCONbits.RBIF = 0;                        // Limpiamos bandera 
+        PORTD = modo;
     }
     if(modo == 0b00000001){                             // Modo Manual
         if(PIR1bits.ADIF){                   // BANDERA = ON --> SIGO ADELANTE
     
-            if(ADCON0bits.CHS == 0)         // ELIJIÓ EL CH0?
-            {
+            if(ADCON0bits.CHS == 0){         // ELIJIÓ EL CH0?
                 val_pot1 = ADRESH;
                 CCPR1L = (val_pot1>>1)+120;
                 CCP1CONbits.DC1B1 = val_pot1 & 0b01;
                 CCP1CONbits.DC1B0 = (val_pot1>>7);
-            }else if(ADCON0bits.CHS == 1)   // ELIJIÓ EL CH1?
-            {
+            }
+            else if(ADCON0bits.CHS == 1){   // ELIJIÓ EL CH1?
                 val_pot2 = ADRESH;
                 CCPR2L = (val_pot2>>1)+120;   // VALOR == 124
                 CCP1CONbits.DC1B1 = val_pot2 & 0b01;
                 CCP1CONbits.DC1B0 = (val_pot2>>7);
-            }else if(ADCON0bits.CHS == 2)   // ELIJIÓ EL CH2?
-            {
+            }
+            else if(ADCON0bits.CHS == 2){   // ELIJIÓ EL CH2?
                 val_pot3 = (ADRESH & 0b11111110);
-               }else if(ADCON0bits.CHS == 3)   // ELIJIÓ EL CH3?
-            {
+            }
+            else if(ADCON0bits.CHS == 3){   // ELIJIÓ EL CH3?
                 val_pot4 = ((ADRESH & 0b11111110) | 0b00000001);
             }
             PIR1bits.ADIF = 0;
         }
+        
         if(INTCONbits.RBIF){             // Fue interrupción del PORTB, entonces:
             if(!PORTBbits.RB1){          // Guarda el valor del servo1 
                 write_EEPROM(address_s1, val_pot1);     //Escribimos el valor del potenciometro en la dirección 
@@ -156,7 +157,6 @@ void __interrupt() isr(void){
 void main(void) {
     setup();
     while(1){ 
-        PORTD = modo;
         if(modo == 0b00000001){         //Si es modo manual, entonces:
             if(GO == 0){    
                 if(ADCON0bits.CHS == 0){    //CH0 -> CH1
@@ -307,7 +307,7 @@ if(modo == 0b00000001){
     PORTA = 0;                  // SETEAMOS ALL PORTs 
     PORTB = 0;
     PORTC = 0;
-    PORTD = 0b00000001;
+    PORTD = 0;
     PORTE = 0;
     
 //Config Reloj
@@ -386,7 +386,7 @@ if(modo == 0b00000010){
     TRISE = 0;                  // Salida
     PORTB = 0;
     PORTC = 0;
-    PORTD = 0b00000010;
+    PORTD = 0;
     PORTE = 0;   	// Comienza en modo reproducción de posiciones	
     
 //Config Reloj
@@ -463,7 +463,7 @@ if(modo == 0b00000100){
     TRISE = 0;                  // Salida
     PORTB = 0;
     PORTC = 0;
-    PORTD = 0b00000100;
+    PORTD = 0;
     PORTE = 0;   	// Comienza en modo reproducción de posiciones	
     
 //Config Reloj
