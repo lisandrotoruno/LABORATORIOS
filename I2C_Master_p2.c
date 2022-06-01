@@ -81,16 +81,18 @@ void __interrupt() isr(void){
         if(!PORTBbits.RB0){                         // cambia modo
             if(modo == 0b00000001){                 // manual -> reproducción
                 modo = 0b00000010;
+                PORTD = modo;
             }
             else if(modo == 0b00000010){            // reproducción -> interfaz
                 modo = 0b00000100;
+                PORTD = modo;
             }
             else if(modo == 0b00000100){            // interfaz -> manual
                 modo = 0b00000001;
+                PORTD = modo;
             }
         }                               // Mostramos el modo en el puerto D    
         INTCONbits.RBIF = 0;                        // Limpiamos bandera 
-        PORTD = modo;
     }
     if(modo == 0b00000001){                             // Modo Manual
         if(PIR1bits.ADIF){                   // BANDERA = ON --> SIGO ADELANTE
@@ -159,7 +161,8 @@ void __interrupt() isr(void){
  ------------------------------------------------------------------------------*/
 void main(void) {
     setup();
-    while(1){ 
+    while(1){
+        PORTD = modo;
         if(modo == 0b00000001){         //Si es modo manual, entonces:
             int_Ninterfaz();
             interupcion_AN();
