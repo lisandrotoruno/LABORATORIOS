@@ -70,12 +70,8 @@ void menusito(void);
 //Prototipo para la I2C
 void wait_I2C(void);
 void start_I2C(void);
-void restart_I2C(void);
 void stop_I2C(void);
-void send_ACK(void);
-void send_NACK(void);
 __bit write_I2C(uint8_t data);
-uint8_t read_I2C(void);
 
 /*------------------------------------------------------------------------------
  * INTERRUPCIONES 
@@ -104,19 +100,25 @@ void __interrupt() isr(void){
                 CCPR1L = (val_pot1>>1)+124;
                 CCP1CONbits.DC1B1 = val_pot1 & 0b01;
                 CCP1CONbits.DC1B0 = (val_pot1>>7);
+                ADCON0bits.CHS = 1;
             }
             else if(ADCON0bits.CHS == 1){   // ELIJIÓ EL CH1?
                 val_pot2 = ADRESH;
                 CCPR2L = (val_pot2>>1)+124;   // VALOR == 124
                 CCP1CONbits.DC1B1 = val_pot2 & 0b01;
                 CCP1CONbits.DC1B0 = (val_pot2>>7);
+                ADCON0bits.CHS = 2;
             }
             else if(ADCON0bits.CHS == 2){   // ELIJIÓ EL CH2?
                 val_pot3 = (ADRESH & 0b11111110);
+                ADCON0bits.CHS = 3;
             }
             else if(ADCON0bits.CHS == 3){   // ELIJIÓ EL CH3?
                 val_pot4 = ((ADRESH & 0b11111110) | 0b00000001);
+                ADCON0bits.CHS = 0;
             }
+            __delay_ms(50);
+            GO = 1;
             PIR1bits.ADIF = 0;
         }
         
