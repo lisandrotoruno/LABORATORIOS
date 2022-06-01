@@ -57,12 +57,13 @@ void setup(void);
 uint8_t read_EEPROM(uint8_t address);               //Leemos
 void write_EEPROM(uint8_t address, uint8_t data);   //Escribimos
 
-//Deshabilitación de interrupciones
+//Hab/Deshabilitación de interrupciones
 void interupcion_NAN(void);     //Deshabilitamaos la interrupción de ADC
 void int_Ninterfaz(void);       //Deshabilitamos la interrupción de interfaz
 
+void interupcion_AN(void);
+
 //Prototipo de función para la interfaz
-void enviar_letra(char letra);
 void print(unsigned char palabra);
 void menusito(void);
 
@@ -158,6 +159,8 @@ void main(void) {
     setup();
     while(1){ 
         if(modo == 0b00000001){         //Si es modo manual, entonces:
+            int_Ninterfaz();
+            interupcion_AN();
             if(GO == 0){    
                 if(ADCON0bits.CHS == 0){    //CH0 -> CH1
                     ADCON0bits.CHS = 1;
@@ -201,8 +204,8 @@ void main(void) {
             }
         
         else if(modo == 0b00000010){         // Si es modo reproducción, entonces:
-            /*interupcion_NAN();          // Deshabilitamos interrupción ADC
-            int_Ninterfaz();            // Deshabilitamos interrupción del EUSART*/
+            interupcion_NAN();          // Deshabilitamos interrupción ADC
+            int_Ninterfaz();            // Deshabilitamos interrupción del EUSART
             if(!PORTBbits.RB1){          // Guarda el valor del servo1 
                 __delay_ms(10);          // Antirrebote
                 val_pot1 = read_EEPROM(address_s1);     // Leemos el valor del potenciometro de la dirección
@@ -229,6 +232,7 @@ void main(void) {
         }
         
         else if(modo == 0b00000100){    // Modo interfaz (no reproduce, ni guarda, solo potenciometros de la interfaz)
+            interupcion_NAN();
             /*
             TMRT para TSR 1 = Vacio y TSR 0 = Ocupado
             TXIF para TXREG 1 = Vacio y TXREG 0 = ocupado
@@ -294,7 +298,6 @@ void main(void) {
  ------------------------------------------------------------------------------*/
 void setup(void){
 //---------------------- CONFIGURACIÓN MODO MANUAL -----------------------------//    
-if(modo == 0b00000001){
 //Config entradas y salidas
     ANSEL = 0x0F;               // AN0, AN1, AN2 Y AN3 ENTRADAS ANALÓGICAS
     ANSELH = 0;                 // I/O digitales
@@ -362,70 +365,9 @@ if(modo == 0b00000001){
     PIR1bits.ADIF = 0;          // Limpiamos bandera de ADC
     PIE1bits.ADIE = 1;          // Habilitamos interrupcion de ADC
     INTCONbits.PEIE = 1;        // Habilitamos int. de perifericos
-}
 
 //-------------------- CONFIGURACIÓN DE REPRODUCCIÓN -----------------------------//
 if(modo == 0b00000010){
-//Config entradas y salidas
-    ANSEL = 0x0F;               // AN0, AN1, AN2 Y AN3 ENTRADAS ANALÓGICAS
-    ANSELH = 0;                 // I/O digitales
-    
-    TRISB = 0b00000111;         // ENTRADA -> PULSADORES (RB0,RB1,RB2)    
-    TRISC = 0;                  // Salida
-    TRISD = 0;                  // Salida
-    TRISE = 0;                  // Salida
-    PORTB = 0;
-    PORTC = 0;
-    PORTD = 0;
-    PORTE = 0;   	// Comienza en modo reproducción de posiciones	
-    
-//Config Reloj
-    OSCCONbits.SCS  = 1;        // Reloj interno
-    OSCCONbits.IRCF = 0b111;    // 8MHz
-    
-//Config IOCB
-    OPTION_REGbits.nRBPU = 0;
-    WPUB = 0b00000111;
-    IOCB = 0b00000111;   
-    
-//Config ADC
-    ADCON0bits.ADCS = 0b11;         // FRC
-    ADCON1bits.VCFG0 = 0;           // Referencia VDD
-    ADCON1bits.VCFG1 = 0;           // Referencia VSS
-    ADCON0bits.CHS = 0;             // Se selecciona PORTA0/AN0
-    ADCON1bits.ADFM = 0;            // Se indica que se tendrá un justificado a la izquierda
-    ADCON0bits.ADON = 1;            // Se habilita el modulo ADC
-    __delay_us(40);                 // Delay para sample time
-        
-//Config PWM
-    TRISCbits.TRISC2 = 1;           // RC2/CCP1 como salida deshabilitado
-    TRISCbits.TRISC1 = 1;           // Se deshabilita salida de PWM (CCP2)
-    CCP1CON = 0;                    // Se apaga CCP1
-    CCP2CON = 0;                    // Se apaga CCP2
-    PR2 = 155;                      // Período de 20 ms  
-    
-//Config CCP
-    CCP1CONbits.P1M = 0;            // Modo single output
-    CCP1CONbits.CCP1M = 0b1100;     // Modo PWM
-    CCP2CONbits.CCP2M = 0b1100;     // Modo PWM
-//Servo 1
-    CCPR1L = 30>>2;                 //Ciclo de trabajo base pues se va a variar
-    CCP1CONbits.DC1B = 30 & 0b11;       
-
-//Servo 2
-    CCPR2L = 30>>2;                 //Ciclo de trabajo base pues se va a variar
-    CCP2CONbits.DC2B0 = 30 & 0b01;      
-    CCP2CONbits.DC2B1 = (30 & 0b10)>>1; 
-
-//Config TMR2
-    PIR1bits.TMR2IF = 0;        // Limpieza de bandera del TMR2
-    T2CONbits.T2CKPS = 0b11;    // Prescaler 1:16
-    T2CONbits.TMR2ON = 1;       // Se enciende TMR2
-    while(!PIR1bits.TMR2IF);    // Se espera un ciclo del TMR2
-    PIR1bits.TMR2IF = 0;        // Limpieza de bandera del TMR2 nuevamente
-    
-    TRISCbits.TRISC2 = 0;       // Se habilita salida de PWM (CCP1)
-    TRISCbits.TRISC1 = 0;       // Se habilita salida de PWM (CCP2)
 //Config I2C
     SSPADD = ((_XTAL_FREQ)/(4*I2C_SPEED)) - 1;  // 100 kHz
     SSPSTATbits.SMP = 1;        // Velocidad de rotación
@@ -443,67 +385,6 @@ if(modo == 0b00000010){
 }
 //-------------------- CONFIGURACIÓN DE LA INTERFAZ -----------------------------//
 if(modo == 0b00000100){
-//Config entradas y salidas
-    ANSEL = 0x0F;               // AN0, AN1, AN2 Y AN3 ENTRADAS ANALÓGICAS
-    ANSELH = 0;                 // I/O digitales
-    
-    TRISB = 0b00000111;         // ENTRADA -> PULSADORES (RB0,RB1,RB2)    
-    TRISC = 0;                  // Salida
-    TRISD = 0;                  // Salida
-    TRISE = 0;                  // Salida
-    PORTB = 0;
-    PORTC = 0;
-    PORTD = 0;
-    PORTE = 0;   	// Comienza en modo reproducción de posiciones	
-    
-//Config Reloj
-    OSCCONbits.SCS  = 1;        // Reloj interno
-    OSCCONbits.IRCF = 0b111;    // 8MHz
-    
-//Config IOCB
-    OPTION_REGbits.nRBPU = 0;
-    WPUB = 0b00000111;
-    IOCB = 0b00000111;   
-    
-//Config ADC
-    ADCON0bits.ADCS = 0b11;         // FRC
-    ADCON1bits.VCFG0 = 0;           // Referencia VDD
-    ADCON1bits.VCFG1 = 0;           // Referencia VSS
-    ADCON0bits.CHS = 0;             // Se selecciona PORTA0/AN0
-    ADCON1bits.ADFM = 0;            // Se indica que se tendrá un justificado a la izquierda
-    ADCON0bits.ADON = 1;            // Se habilita el modulo ADC
-    __delay_us(40);                 // Delay para sample time
-        
-//Config PWM
-    TRISCbits.TRISC2 = 1;           // RC2/CCP1 como salida deshabilitado
-    TRISCbits.TRISC1 = 1;           // Se deshabilita salida de PWM (CCP2)
-    CCP1CON = 0;                    // Se apaga CCP1
-    CCP2CON = 0;                    // Se apaga CCP2
-    PR2 = 155;                      // Período de 20 ms  
-    
-//Config CCP
-    CCP1CONbits.P1M = 0;            // Modo single output
-    CCP1CONbits.CCP1M = 0b1100;     // Modo PWM
-    CCP2CONbits.CCP2M = 0b1100;     // Modo PWM
-//Servo 1
-    CCPR1L = 30>>2;                 //Ciclo de trabajo base pues se va a variar
-    CCP1CONbits.DC1B = 30 & 0b11;       
-
-//Servo 2
-    CCPR2L = 30>>2;                 //Ciclo de trabajo base pues se va a variar
-    CCP2CONbits.DC2B0 = 30 & 0b01;      
-    CCP2CONbits.DC2B1 = (30 & 0b10)>>1; 
-
-//Config TMR2
-    PIR1bits.TMR2IF = 0;        // Limpieza de bandera del TMR2
-    T2CONbits.T2CKPS = 0b11;    // Prescaler 1:16
-    T2CONbits.TMR2ON = 1;       // Se enciende TMR2
-    while(!PIR1bits.TMR2IF);    // Se espera un ciclo del TMR2
-    PIR1bits.TMR2IF = 0;        // Limpieza de bandera del TMR2 nuevamente
-    
-    TRISCbits.TRISC2 = 0;       // Se habilita salida de PWM (CCP1)
-    TRISCbits.TRISC1 = 0;       // Se habilita salida de PWM (CCP2)
-    
 //Config EUSART TRANSMITER
     SPBRGH  =   0;              // Byte Superior 9600 Baud Rate
     SPBRG   =   12;             // Byte inferior
@@ -515,14 +396,7 @@ if(modo == 0b00000100){
     TXSTAbits.TXEN = 1;         // Activa circuito para trasmisor del EUSART
     TXSTAbits.TX9  = 0;         // Usamos solo 8 bits
     RCSTAbits.CREN = 1;         // Activa circuito para receptor del EUSART
-    
-//Config I2C
-    SSPADD = ((_XTAL_FREQ)/(4*I2C_SPEED)) - 1;  // 100 kHz
-    SSPSTATbits.SMP = 1;        // Velocidad de rotación
-    SSPCONbits.SSPM = 0b1000;   // I2C master mode, clock= Fosc/(4*(SSPADD+1))
-    SSPCONbits.SSPEN = 1;       // Habilitamos pines de I2C
-    PIR1bits.SSPIF = 0;         // Limpiamos bandera de interrupción de I2C
-    
+   
 //Config INTERRUPCIONES
     PIE1bits.RCIE  = 1;         // Es la interrupción de receptor
     INTCONbits.GIE  = 1;        // Hab. int. generales
@@ -566,6 +440,9 @@ void interupcion_NAN(void){
     PIE1bits.ADIE = 0;          // Deshabilitamos interrupcion del ADC
 }
 
+void interupcion_AN(void){
+    PIE1bits.ADIE = 1;          // Deshabilitamos interrupcion del ADC
+}
 /*******************************************************************************
  * Funciones del modulo MSSP (I2C)
  *******************************************************************************/
@@ -604,12 +481,6 @@ void print(unsigned char palabra){
         TXREG = (palabra);
         palabra++;
     }    
-    enviar_letra('\r');         
-}
-
-void enviar_letra(char letra){
-    while(!TXIF);              // 
-    TXREG = letra;
 }
 
 void menusito(void){
